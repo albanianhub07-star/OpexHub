@@ -5,24 +5,124 @@
 --   - Experimental pet duplication attempt
 -- Note: Pet duplication is highly game-specific and usually fails on secure servers.
 
-local Rayfield = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source.lua"))()
+local Rayfield = nil
+local success, RayfieldLib = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source.lua"))()
+end)
+if success and RayfieldLib then
+    Rayfield = RayfieldLib
+end
 
-local Window = Rayfield:CreateWindow({
-    Name = "OpexHub",
-    LoadingTitle = "OpexHub",
-    LoadingSubtitle = "Garden + Pets AIO",
-    ConfigurationSaving = {
-        Enabled = true,
-        FolderName = "OpexHubConfig",
-        FileName = "Settings"
-    },
-    KeySystem = false
-})
+local function createCustomUI()
+    local player = game.Players.LocalPlayer
+    if not player then
+        return
+    end
 
-local GardenTab = Window:CreateTab("Garden")
-local PetTab = Window:CreateTab("Pets")
-local InfoTab = Window:CreateTab("Info")
+    local playerGui = player:FindFirstChild("PlayerGui") or player:WaitForChild("PlayerGui")
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "OpexHubCustomUI"
+    gui.ResetOnSpawn = false
+    gui.Parent = playerGui
 
+    local frame = Instance.new("Frame")
+    frame.Name = "MainFrame"
+    frame.Size = UDim2.new(0, 280, 0, 360)
+    frame.Position = UDim2.new(0.5, -140, 0.2, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    frame.BorderSizePixel = 0
+    frame.BackgroundTransparency = 0.1
+    frame.Parent = gui
+
+    local uiPadding = Instance.new("UIPadding")
+    uiPadding.PaddingTop = UDim.new(0, 10)
+    uiPadding.PaddingBottom = UDim.new(0, 10)
+    uiPadding.PaddingLeft = UDim.new(0, 10)
+    uiPadding.PaddingRight = UDim.new(0, 10)
+    uiPadding.Parent = frame
+
+    local layout = Instance.new("UIListLayout")
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Padding = UDim.new(0, 8)
+    layout.Parent = frame
+
+    local function makeLabel(text, textSize)
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(1, 0, 0, textSize or 22)
+        label.BackgroundTransparency = 1
+        label.TextColor3 = Color3.fromRGB(255, 255, 255)
+        label.TextScaled = false
+        label.Font = Enum.Font.SourceSansSemibold
+        label.Text = text
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = frame
+        return label
+    end
+
+    local function makeButton(text, callback)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(1, 0, 0, 34)
+        button.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        button.BorderSizePixel = 0
+        button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        button.Font = Enum.Font.SourceSansSemibold
+        button.Text = text
+        button.TextScaled = false
+        button.Parent = frame
+        button.MouseButton1Click:Connect(callback)
+        return button
+    end
+
+    local function makeToggle(text, getValue, setValue)
+        local button = makeButton(text .. " [OFF]", function()
+            local newValue = not getValue()
+            setValue(newValue)
+            button.Text = text .. " [" .. (newValue and "ON" or "OFF") .. "]"
+        end)
+        button.Text = text .. " [" .. (getValue() and "ON" or "OFF") .. "]"
+        return button
+    end
+
+    makeLabel("OpexHub", 26).TextXAlignment = Enum.TextXAlignment.Center
+    makeLabel("Small fallback UI", 18)
+
+    makeToggle("Auto Harvest", function() return AutoHarvest end, function(value) AutoHarvest = value end)
+    makeToggle("Auto Water", function() return AutoWater end, function(value) AutoWater = value end)
+
+    makeButton("Harvest Once", HarvestAll)
+    makeButton("Water Once", WaterAll)
+    makeButton("Duplicate Pet", DuplicatePet)
+
+    DuplicateStatus = makeLabel("Status: Idle", 20)
+    DuplicateStatus.TextWrapped = true
+    DuplicateStatus.TextXAlignment = Enum.TextXAlignment.Left
+
+    makeLabel("Note: This UI is a simple fallback if Rayfield does not open.", 16)
+    makeButton("Close UI", function() gui:Destroy() end)
+end
+
+local Window
+if Rayfield then
+    local ok, win = pcall(function()
+        return Rayfield:CreateWindow({
+            Name = "OpexHub",
+            LoadingTitle = "OpexHub",
+            LoadingSubtitle = "Garden + Pets AIO",
+            ConfigurationSaving = {
+                Enabled = true,
+                FolderName = "OpexHubConfig",
+                FileName = "Settings"
+            },
+            KeySystem = false
+        })
+    end)
+    if ok then
+        Window = win
+    end
+end
+
+local GardenTab, PetTab, InfoTab
+local DuplicateStatus
 local AutoHarvest = false
 local AutoWater = false
 
@@ -80,40 +180,79 @@ spawn(function()
     end
 end)
 
-GardenTab:CreateToggle({
-    Name = "Auto Harvest",
-    CurrentValue = false,
-    Flag = "AutoHarvest",
-    Callback = function(Value)
-        AutoHarvest = Value
-    end
-})
+if Window then
+    GardenTab = Window:CreateTab("Garden")
+    PetTab = Window:CreateTab("Pets")
+    InfoTab = Window:CreateTab("Info")
 
-GardenTab:CreateToggle({
-    Name = "Auto Water",
-    CurrentValue = false,
-    Flag = "AutoWater",
-    Callback = function(Value)
-        AutoWater = Value
-    end
-})
+    GardenTab:CreateToggle({
+        Name = "Auto Harvest",
+        CurrentValue = false,
+        Flag = "AutoHarvest",
+        Callback = function(Value)
+            AutoHarvest = Value
+        end
+    })
 
-GardenTab:CreateButton({
-    Name = "Harvest Once",
-    Callback = HarvestAll
-})
+    GardenTab:CreateToggle({
+        Name = "Auto Water",
+        CurrentValue = false,
+        Flag = "AutoWater",
+        Callback = function(Value)
+            AutoWater = Value
+        end
+    })
 
-GardenTab:CreateButton({
-    Name = "Water Once",
-    Callback = WaterAll
-})
+    GardenTab:CreateButton({
+        Name = "Harvest Once",
+        Callback = HarvestAll
+    })
 
-local DuplicateStatus = PetTab:CreateLabel("Status: Idle")
+    GardenTab:CreateButton({
+        Name = "Water Once",
+        Callback = WaterAll
+    })
+
+    DuplicateStatus = PetTab:CreateLabel("Status: Idle")
+
+    PetTab:CreateButton({
+        Name = "⚠️ Duplicate Pet & Create Clone Tool ⚠️",
+        Callback = DuplicatePet
+    })
+
+    PetTab:CreateLabel("Note: Experimental duplication. Most games validate pets server-side.")
+    PetTab:CreateLabel("If successful and two matching pets are detected, a Pet Clone Tool is created in Backpack.")
+    PetTab:CreateLabel("The clone tool copies the held pet and has a 2-minute cooldown.")
+
+    InfoTab:CreateParagraph({
+        Title = "How to use",
+        Content = "Use Auto Harvest / Auto Water for standard garden interactions.\nPet duplication is experimental and depends on the game's implementation.\nNo remote exploit can guarantee being undetected.\nThe UI is built with Rayfield and saved under OpexHub settings."
+    })
+
+    Rayfield:Notify({
+        Title = "OpexHub Loaded",
+        Content = "Garden + Pet tool ready",
+        Duration = 3
+    })
+else
+    createCustomUI()
+end
+
 local DuplicationCooldown = 120
 local lastDuplicateTime = 0
 
 local function setDuplicateStatus(text)
-    DuplicateStatus:Set("Status: " .. text)
+    local msg = "Status: " .. text
+    if not DuplicateStatus then
+        return
+    end
+    pcall(function()
+        if type(DuplicateStatus.Set) == "function" then
+            DuplicateStatus:Set(msg)
+        else
+            DuplicateStatus.Text = msg
+        end
+    end)
 end
 
 local function getCooldownRemaining()
