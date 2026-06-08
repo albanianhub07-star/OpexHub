@@ -13,6 +13,14 @@ if success and RayfieldLib then
     Rayfield = RayfieldLib
 end
 
+local GardenTab, PetTab, InfoTab
+local DuplicateStatus
+local AutoHarvest = false
+local AutoWater = false
+local DuplicationCooldown = 120
+local lastDuplicateTime = 0
+local HarvestAll, WaterAll, DuplicatePet
+
 local function createCustomUI()
     local player = game.Players.LocalPlayer
     if not player then
@@ -45,6 +53,47 @@ local function createCustomUI()
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Padding = UDim.new(0, 8)
     layout.Parent = frame
+
+    local UserInputService = game:GetService("UserInputService")
+    local dragging = false
+    local dragInput = nil
+    local dragStart = nil
+    local startPos = nil
+
+    local function updateDrag(input)
+        local delta = input.Position - dragStart
+        frame.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            updateDrag(input)
+        end
+    end)
 
     local function makeLabel(text, textSize)
         local label = Instance.new("TextLabel")
@@ -89,9 +138,9 @@ local function createCustomUI()
     makeToggle("Auto Harvest", function() return AutoHarvest end, function(value) AutoHarvest = value end)
     makeToggle("Auto Water", function() return AutoWater end, function(value) AutoWater = value end)
 
-    makeButton("Harvest Once", HarvestAll)
-    makeButton("Water Once", WaterAll)
-    makeButton("Duplicate Pet", DuplicatePet)
+    makeButton("Harvest Once", function() HarvestAll() end)
+    makeButton("Water Once", function() WaterAll() end)
+    makeButton("Duplicate Pet", function() DuplicatePet() end)
 
     DuplicateStatus = makeLabel("Status: Idle", 20)
     DuplicateStatus.TextWrapped = true
@@ -131,7 +180,7 @@ local function safeFindPlayerCharacter()
     return player and player.Character
 end
 
-local function HarvestAll()
+HarvestAll = function()
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("ClickDetector") and obj.Name:lower():find("harvest") then
             pcall(fireclickdetector, obj)
@@ -150,7 +199,7 @@ local function HarvestAll()
     end
 end
 
-local function WaterAll()
+WaterAll = function()
     for _, obj in ipairs(workspace:GetDescendants()) do
         if obj:IsA("ClickDetector") and obj.Name:lower():find("water") then
             pcall(fireclickdetector, obj)
@@ -205,19 +254,19 @@ if Window then
 
     GardenTab:CreateButton({
         Name = "Harvest Once",
-        Callback = HarvestAll
+        Callback = function() HarvestAll() end
     })
 
     GardenTab:CreateButton({
         Name = "Water Once",
-        Callback = WaterAll
+        Callback = function() WaterAll() end
     })
 
     DuplicateStatus = PetTab:CreateLabel("Status: Idle")
 
     PetTab:CreateButton({
         Name = "⚠️ Duplicate Pet & Create Clone Tool ⚠️",
-        Callback = DuplicatePet
+        Callback = function() DuplicatePet() end
     })
 
     PetTab:CreateLabel("Note: Experimental duplication. Most games validate pets server-side.")
@@ -518,7 +567,7 @@ local function attemptRemoteDuplication(remote, args)
     return false
 end
 
-local function DuplicatePet()
+DuplicatePet = function()
     if isDuplicateOnCooldown() then
         setDuplicateStatus("Cooldown active: " .. math.ceil(getCooldownRemaining()) .. "s left")
         return
