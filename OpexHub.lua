@@ -314,8 +314,11 @@ local function isDuplicateOnCooldown()
 end
 
 local function isPetName(name)
+    if type(name) ~= "string" then
+        return false
+    end
     local lower = name:lower()
-    return lower:find("pet") or lower:find("companion") or lower:find("buddy") or lower:find("farm") or lower:find("animal")
+    return lower:find("pet") or lower:find("companion") or lower:find("buddy") or lower:find("farm") or lower:find("animal") or lower:find("dragon") or lower:find("fox") or lower:find("cat") or lower:find("dog")
 end
 
 local function getCurrentHeldPet()
@@ -324,15 +327,18 @@ local function getCurrentHeldPet()
     if not character then
         return nil
     end
+
     local tool = character:FindFirstChildOfClass("Tool")
-    if tool and tool.Name ~= "Pet Clone Tool" and isPetName(tool.Name) then
+    if tool and tool.Name ~= "Pet Clone Tool" then
         return tool
     end
+
     for _, item in ipairs(character:GetChildren()) do
-        if item.Name ~= "Pet Clone Tool" and isPetName(item.Name) then
+        if item.Name ~= "Pet Clone Tool" and isPetCandidate(item) then
             return item
         end
     end
+
     return nil
 end
 
@@ -349,7 +355,7 @@ local function getPetInventoryCount(petName)
     for _, container in ipairs(containers) do
         if container then
             for _, item in ipairs(container:GetChildren()) do
-                if item:IsA("Tool") and item.Name == petName then
+                if item.Name == petName and isPetCandidate(item) then
                     count = count + 1
                 end
             end
@@ -520,7 +526,7 @@ local function clonePetToInventory(source)
     end
 
     local clone = source:Clone()
-    local dest = player:FindFirstChild("Backpack") or player:FindFirstChild("Pets") or player.Character
+    local dest = player:FindFirstChild("Backpack") or player:FindFirstChild("Pets") or player:FindFirstChild("PetInventory") or player:FindFirstChild("Inventory") or player.Character
     clone.Parent = dest or source.Parent
     return clone
 end
@@ -539,6 +545,10 @@ end
 local function buildRemoteArgs(remote, template)
     local nameLower = remote.Name:lower()
     if template then
+        if nameLower:find("buy") or nameLower:find("purchase") or nameLower:find("shop") or nameLower:find("crate") then
+            return {template.Name, 1}
+        end
+
         if nameLower:find("give") or nameLower:find("add") or nameLower:find("spawn") or nameLower:find("place") or nameLower:find("trade") or nameLower:find("inventory") or nameLower:find("pet") then
             return {template.Name}
         end
