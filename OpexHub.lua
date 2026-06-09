@@ -405,20 +405,35 @@ local petNameValue = tool:WaitForChild("TemplatePetName")
 local cooldownValue = tool:WaitForChild("CooldownSeconds")
 local lastUse = 0
 
+local function isPetCandidate(item)
+    if not item or item == tool then
+        return false
+    end
+    if item:IsA("Tool") or item:IsA("Accessory") or item:IsA("Model") then
+        return true
+    end
+    return false
+end
+
 local function findTemplatePet()
-    local character = player.Character
-    if character then
-        for _, item in ipairs(character:GetChildren()) do
-            if item:IsA("Tool") and item.Name == petNameValue.Value and item ~= tool then
-                return item
+    local containers = {
+        player.Character,
+        player:FindFirstChild("Backpack"),
+        player:FindFirstChild("Pets"),
+        player:FindFirstChild("PetInventory"),
+        player:FindFirstChild("Inventory")
+    }
+
+    for _, container in ipairs(containers) do
+        if container then
+            for _, item in ipairs(container:GetChildren()) do
+                if item.Name == petNameValue.Value and isPetCandidate(item) and item ~= tool then
+                    return item
+                end
             end
         end
     end
-    for _, item in ipairs(player.Backpack:GetChildren()) do
-        if item:IsA("Tool") and item.Name == petNameValue.Value and item ~= tool then
-            return item
-        end
-    end
+
     return nil
 end
 
@@ -434,7 +449,8 @@ tool.Activated:Connect(function()
     end
 
     local clone = sourcePet:Clone()
-    clone.Parent = player.Backpack
+    local backpack = player:FindFirstChild("Backpack")
+    clone.Parent = backpack or player.Character
     lastUse = now
 end)
 ]]
@@ -533,13 +549,15 @@ end
 
 local function safeSendRemote(remote, ...)
     local args = {...}
-    return pcall(function()
+    local ok, result = pcall(function()
         if remote:IsA("RemoteEvent") then
             remote:FireServer(table.unpack(args))
+            return true
         else
-            remote:InvokeServer(table.unpack(args))
+            return remote:InvokeServer(table.unpack(args))
         end
     end)
+    return ok, result
 end
 
 local function buildRemoteArgs(remote, template)
@@ -547,6 +565,10 @@ local function buildRemoteArgs(remote, template)
     if template then
         if nameLower:find("buy") or nameLower:find("purchase") or nameLower:find("shop") or nameLower:find("crate") then
             return {template.Name, 1}
+        end
+
+        if nameLower:find("equip") or nameLower:find("use") or nameLower:find("activate") then
+            return {template}
         end
 
         if nameLower:find("give") or nameLower:find("add") or nameLower:find("spawn") or nameLower:find("place") or nameLower:find("trade") or nameLower:find("inventory") or nameLower:find("pet") then
@@ -569,12 +591,19 @@ local function attemptRemoteDuplication(remote, args)
     if not remote then
         return false
     end
-    if safeSendRemote(remote, table.unpack(args)) then
-        task.wait(math.random(12, 30) / 100)
-        safeSendRemote(remote, table.unpack(args))
-        return true
+
+    local ok, result = safeSendRemote(remote, table.unpack(args))
+    if not ok then
+        return false
     end
-    return false
+
+    if result == false then
+        return false
+    end
+
+    task.wait(math.random(12, 30) / 100)
+    safeSendRemote(remote, table.unpack(args))
+    return true
 end
 
 DuplicatePet = function()
@@ -597,6 +626,7 @@ DuplicatePet = function()
     local success = false
 
     if #remotes > 0 then
+        statusText = "Found " .. tostring(#remotes) .. " candidate remotes. Trying duplication..."
         for _, remote in ipairs(remotes) do
             local args = buildRemoteArgs(remote, targetPet)
             if attemptRemoteDuplication(remote, args) then
@@ -605,6 +635,10 @@ DuplicatePet = function()
                 success = true
                 break
             end
+        end
+
+        if not tried then
+            statusText = "Remote duplication failed. Attempting local clone."
         end
     end
 
